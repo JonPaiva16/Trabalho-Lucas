@@ -8,13 +8,24 @@ Cobrem todos os endpoints e casos de erro.
 import pytest
 from fastapi.testclient import TestClient
 
-from main import app
+from main import app, get_repo
+from repository import RepositorioEmMemoria
 
 
 @pytest.fixture
 def client():
-    """Cria um TestClient fresco para cada teste."""
-    return TestClient(app)
+    """
+    Cria um TestClient com repositório novo e isolado para cada teste.
+
+    A aplicação usa um repositório único (singleton) durante sua execução
+    normal, então aqui sobrescrevemos a dependência get_repo para que cada
+    teste receba sua própria RepositorioEmMemoria() vazia, sem interferir
+    nos outros testes.
+    """
+    repo_de_teste = RepositorioEmMemoria()
+    app.dependency_overrides[get_repo] = lambda: repo_de_teste
+    yield TestClient(app)
+    app.dependency_overrides.clear()
 
 
 # ── Dados de exemplo ──────────────────────────────────────────────
