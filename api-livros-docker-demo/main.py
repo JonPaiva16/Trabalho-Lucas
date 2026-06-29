@@ -1,34 +1,15 @@
-"""
-API REST de catalogo de livros (FastAPI).
-
-Estrutura em camadas:
-  - Rotas (este arquivo): recebem a requisicao, chamam o service, devolvem a resposta
-  - Service: regras de negocio
-  - Repository (repository.py): guarda e recupera os dados
-
-Para rodar:
-  pip install fastapi uvicorn
-  uvicorn main:app --reload
-
-Documentacao interativa: http://localhost:8000/docs
-"""
-
 from fastapi import FastAPI, HTTPException, status
-
 from models import Livro, LivroCriar, LivroAtualizar
 from repository import RepositorioEmMemoria, RepositorioLivros
 
 
-# ----------------------------------------------------------------------
-# Camada de servico (regras de negocio)
-# ----------------------------------------------------------------------
+app = FastAPI(title="Catalogo de Livros", version="1.0.0")
 
+
+# =========================================================
+# SERVIÇO (AGORA RECRIÁVEL)
+# =========================================================
 class ServicoLivros:
-    """
-    Onde mora a logica de negocio. Recebe um RepositorioLivros pela
-    interface --- nao sabe se e em memoria, SQLite ou outra coisa.
-    """
-
     def __init__(self, repositorio: RepositorioLivros) -> None:
         self._repo = repositorio
 
@@ -48,20 +29,20 @@ class ServicoLivros:
         return self._repo.remover(livro_id)
 
 
-# ----------------------------------------------------------------------
-# Montagem da aplicacao
-# ----------------------------------------------------------------------
-
-app = FastAPI(title="Catalogo de Livros", version="1.0.0")
-
-# Injecao de dependencia simples: trocar a linha abaixo por outra
-# implementacao de RepositorioLivros nao exige mudar mais nada.
-servico = ServicoLivros(RepositorioEmMemoria())
+# =========================================================
+# FUNÇÃO DE RESET (ESSENCIAL PARA OS TESTES)
+# =========================================================
+def criar_servico():
+    return ServicoLivros(RepositorioEmMemoria())
 
 
-# ----------------------------------------------------------------------
-# Rotas (camada de API)
-# ----------------------------------------------------------------------
+# instância global inicial
+servico = criar_servico()
+
+
+# =========================================================
+# ROTAS
+# =========================================================
 
 @app.get("/livros", response_model=list[Livro])
 def listar_livros():
@@ -72,10 +53,7 @@ def listar_livros():
 def buscar_livro(livro_id: int):
     livro = servico.buscar(livro_id)
     if livro is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Livro nao encontrado",
-        )
+        raise HTTPException(status_code=404, detail="Livro nao encontrado")
     return livro
 
 
@@ -88,19 +66,14 @@ def criar_livro(dados: LivroCriar):
 def atualizar_livro(livro_id: int, dados: LivroAtualizar):
     livro = servico.atualizar(livro_id, dados)
     if livro is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Livro nao encontrado",
-        )
+        raise HTTPException(status_code=404, detail="Livro nao encontrado")
     return livro
 
 
-@app.delete("/livros/{livro_id}", status_code=status.HTTP_200_OK)
+@app.delete("/livros/{livro_id}", status_code=200)
 def remover_livro(livro_id: int):
-    removido = servico.remover(livro_id)
-    if not removido:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Livro nao encontrado",
-        )
+    ok = servico.remover(livro_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Livro nao encontrado")
+
     return {"mensagem": "Livro removido com sucesso"}
