@@ -1,106 +1,86 @@
-"""
-API REST de catalogo de livros (FastAPI).
-
-Estrutura em camadas:
-  - Rotas (este arquivo): recebem a requisicao, chamam o service, devolvem a resposta
-  - Service: regras de negocio
-  - Repository (repository.py): guarda e recupera os dados
-
-Para rodar:
-  pip install fastapi uvicorn
-  uvicorn main:app --reload
-
-Documentacao interativa: http://localhost:8000/docs
-"""
-
-from fastapi import FastAPI, HTTPException, status
-
+from fastapi import FastAPI, HTTPException, status, Depends
 from models import Livro, LivroCriar, LivroAtualizar
 from repository import RepositorioEmMemoria, RepositorioLivros
 
 
-# ----------------------------------------------------------------------
-# Camada de servico (regras de negocio)
-# ----------------------------------------------------------------------
+app = FastAPI(title="Catalogo de Livros", version="1.0.0")
 
+
+# =========================================================
+# DEPENDÊNCIA (REPOSITÓRIO ÚNICO PARA TODA A APLICAÇÃO)
+# =========================================================
+# IMPORTANTE: o repositório precisa ser UMA ÚNICA instância
+# compartilhada por todas as requisições. Se get_repo() criasse
+# uma RepositorioEmMemoria() nova a cada chamada (como estava
+# antes), cada requisição teria seu próprio dicionário vazio e
+# os dados nunca persistiriam entre um POST e um GET, por exemplo.
+_repositorio = RepositorioEmMemoria()
+
+
+def get_repo():
+    return _repositorio
+
+
+def get_servico(repo: RepositorioLivros = Depends(get_repo)):
+    return ServicoLivros(repo)
+
+
+# =========================================================
+# SERVIÇO
+# =========================================================
 class ServicoLivros:
-    """
-    Onde mora a logica de negocio. Recebe um RepositorioLivros pela
-    interface --- nao sabe se e em memoria, SQLite ou outra coisa.
-    """
-
-    def __init__(self, repositorio: RepositorioLivros) -> None:
+    def __init__(self, repositorio: RepositorioLivros):
         self._repo = repositorio
 
-    def listar(self) -> list[Livro]:
+    def listar(self):
         return self._repo.listar()
 
-    def buscar(self, livro_id: int) -> Livro | None:
+    def buscar(self, livro_id: int):
         return self._repo.buscar_por_id(livro_id)
 
-    def criar(self, dados: LivroCriar) -> Livro:
+    def criar(self, dados: LivroCriar):
         return self._repo.adicionar(dados)
 
-    def atualizar(self, livro_id: int, dados: LivroAtualizar) -> Livro | None:
+    def atualizar(self, livro_id: int, dados: LivroAtualizar):
         return self._repo.atualizar(livro_id, dados)
 
-    def remover(self, livro_id: int) -> bool:
+    def remover(self, livro_id: int):
         return self._repo.remover(livro_id)
 
 
-# ----------------------------------------------------------------------
-# Montagem da aplicacao
-# ----------------------------------------------------------------------
-
-app = FastAPI(title="Catalogo de Livros", version="1.0.0")
-
-# Injecao de dependencia simples: trocar a linha abaixo por outra
-# implementacao de RepositorioLivros nao exige mudar mais nada.
-servico = ServicoLivros(RepositorioEmMemoria())
-
-
-# ----------------------------------------------------------------------
-# Rotas (camada de API)
-# ----------------------------------------------------------------------
+# =========================================================
+# ROTAS (AGORA USANDO DEPENDS)
+# =========================================================
 
 @app.get("/livros", response_model=list[Livro])
-def listar_livros():
+def listar_livros(servico: ServicoLivros = Depends(get_servico)):
     return servico.listar()
 
 
 @app.get("/livros/{livro_id}", response_model=Livro)
-def buscar_livro(livro_id: int):
+def buscar_livro(livro_id: int, servico: ServicoLivros = Depends(get_servico)):
     livro = servico.buscar(livro_id)
-    if livro is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Livro nao encontrado",
-        )
+    if not livro:
+        raise HTTPException(status_code=404, detail="Livro nao encontrado")
     return livro
 
 
-@app.post("/livros", response_model=Livro, status_code=status.HTTP_201_CREATED)
-def criar_livro(dados: LivroCriar):
+@app.post("/livros", response_model=Livro, status_code=201)
+def criar_livro(dados: LivroCriar, servico: ServicoLivros = Depends(get_servico)):
     return servico.criar(dados)
 
 
 @app.put("/livros/{livro_id}", response_model=Livro)
-def atualizar_livro(livro_id: int, dados: LivroAtualizar):
+def atualizar_livro(livro_id: int, dados: LivroAtualizar, servico: ServicoLivros = Depends(get_servico)):
     livro = servico.atualizar(livro_id, dados)
-    if livro is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Livro nao encontrado",
-        )
+    if not livro:
+        raise HTTPException(status_code=404, detail="Livro nao encontrado")
     return livro
 
 
-@app.delete("/livros/{livro_id}", status_code=status.HTTP_200_OK)
-def remover_livro(livro_id: int):
-    removido = servico.remover(livro_id)
-    if not removido:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Livro nao encontrado",
-        )
+@app.delete("/livros/{livro_id}", status_code=200)
+def remover_livro(livro_id: int, servico: ServicoLivros = Depends(get_servico)):
+    ok = servico.remover(livro_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Livro nao encontrado")
     return {"mensagem": "Livro removido com sucesso"}

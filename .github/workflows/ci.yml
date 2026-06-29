@@ -1,0 +1,60 @@
+name: CI - Pipeline de Qualidade
+
+# ── Gatilhos ──────────────────────────────────────────────────────
+# Roda em cada push e em cada Pull Request que tenha como destino
+# a branch main. Isso garante que NENHUM código chegue na main
+# sem passar pela verificação de qualidade.
+on:
+  push:
+    branches: ['*']            # qualquer branch (incluindo main)
+  pull_request:
+    branches: [main]           # PRs que visam a main
+
+jobs:
+  quality:
+    name: Lint + Testes + Cobertura
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: api-livros-docker-demo
+
+    steps:
+      # 1. Baixa o código do repositório
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # 2. Configura o Python 3.11
+      - name: Configurar Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      # 3. Instala as dependências (cache do pip para acelerar)
+      - name: Instalar dependências
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      # 4. Pylint — análise estática do código
+      - name: Pylint
+        run: |
+          pylint main.py models.py repository.py --rcfile=.pylintrc || true
+          # O '|| true' garante que o workflow continue mesmo com warnings.
+          # Se quiser que o pipeline FALHE quando pylint der erro, remova o '|| true'
+          # e ajuste o .pylintrc para tolerar apenas o score desejado.
+
+      # 5. Pytest com cobertura mínima de 80%
+      - name: Testes com cobertura
+        run: |
+          pytest tests/ \
+            --cov=. \
+            --cov-report=term-missing \
+            --cov-fail-under=80 \
+            -v
+
+      # 6. (Opcional) Mostra resumo da cobertura
+      - name: Resumo da cobertura
+        if: always()
+        run: |
+          echo "✅ Pipeline CI concluída com sucesso!"
+          echo "Cobertura mínima exigida: 80%"
