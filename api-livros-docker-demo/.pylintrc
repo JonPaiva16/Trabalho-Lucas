@@ -1,0 +1,25 @@
+[MASTER]
+# Desabilita mensagens específicas que geram falso-positivo no FastAPI
+disable=
+    C0114,       # missing-module-docstring (módulos pequenos)
+    C0115,       # missing-class-docstring (classes Pydantic já têm docstring)
+    C0116,       # missing-function-docstring (rotas FastAPI não precisam)
+    R0903,       # too-few-public-methods (models Pydantic têm 1 método)
+    R0801,       # similar-lines (código repetido em testes é normal)
+    W0603,       # global-statement (variável 'servico' no main.py)
+    C0103,       # invalid-name (nomes como 'app' são padrão FastAPI)
+    E0401,       # import-error (no CI as dependências estão instaladas)
+    W0613,       # unused-argument (parâmetros de rotas FastAPI)
+    R0913,       # too-many-arguments
+    C0301,       # line-too-long (deixe o black/formatter cuidar disso)
+
+[FORMAT]
+max-line-length=120
+
+[BASIC]
+# Nomes de variáveis com 2+ caracteres são aceitos
+min-naming-length=2
+
+[DESIGN]
+max-attributes=10
+max-args=7
